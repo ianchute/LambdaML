@@ -42,4 +42,4 @@ print('after:', model.compute_log_likelihood(X,Y))
 y_pred = model.predict(X)
 
 # measure accuracy
-print('Accuracy:', 1 - np.abs((Y - y_pred).mean()))
+print('Accuracy:', 1 - np.abs(Y - y_pred).mean())
