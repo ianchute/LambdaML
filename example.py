@@ -1,42 +1,3 @@
-# LambdaML
-### By: Ian Chu Te
-
-##### A lambda-based machine learning library.
-
-> In computer programming, an *lambda function* is a function definition that is not bound to an identifier.
-
-With LambdaML, all you need are two things:
-
-1. **f** - your statistical model (function):
-
-```python
-
-def sine_regression(x,p):
-    """Custom sine-based regression model."""
-    signal = p['w'].dot(x) + p['b']
-    return sine_activation(signal)
-
-```
-
-2. **p** - your initial parameters (dict):
-
-```python
-
-p = {'w': np.array([np.random.uniform() for i in range(len(X[0]))]),
-    'b': 0.0001}
-
-```
-
-And your model will be fitted automatically using numerical methods.
-No need to analytically solve for the gradients!
-It numerically estimates the gradients for you!
-
-#### NOTE: LambdaML is still under active development.
-
-#### Basic Usage
-
-```python
-
 import numpy as np
 from lambda_model import LambdaClassifierModel
 
@@ -82,6 +43,3 @@ y_pred = model.predict(X)
 
 # measure accuracy
 print('Accuracy:', 1 - np.abs((Y - y_pred).mean()))
-
-
-```
