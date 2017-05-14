@@ -1,7 +1,7 @@
 # LambdaML
 ### By: Ian Chu Te
 
-<img src="https://maxcdn.icons8.com/windows10/PNG/512/Alphabet/lambda-512.png" style="max-height: 64px;"/>
+<img src="https://maxcdn.icons8.com/windows10/PNG/512/Alphabet/lambda-512.png" width="128"/>
 
 ##### A lambda-based machine learning library.
 
