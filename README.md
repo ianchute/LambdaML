@@ -7,7 +7,7 @@
 
 With LambdaML, all you need are two things:
 
-1. **f** - your statistical model (function):
+1. **f** - your statistical model - the **"lambda"** (function):
 
 ```python
 
