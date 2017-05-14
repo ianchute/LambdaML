@@ -3,7 +3,9 @@
 
 ##### A lambda-based machine learning library.
 
-> In computer programming, an *lambda function* is a function definition that is not bound to an identifier.
+> In computer programming, a *lambda function* is a function definition that is not bound to an identifier.
+
+In LambdaML, you can use *any function (named or unnamed)* as your model function and LambdaML will automatically fit the parameters for you!
 
 With LambdaML, all you need are two things:
 
