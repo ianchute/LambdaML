@@ -40,11 +40,11 @@ class LambdaUtils:
     @staticmethod
     def log_likelihood(f):
         """Generates the log likelihood function of f"""
-        def f_loss(p,X,Y):
-            loss = 0
+        def f_likelihood(p,X,Y):
+            likelihood = 0
             for x,y in zip(X,Y):
                 _f = f(x,p)
                 if _f > 0 and _f < 1:
-                    loss += y * np.log(_f) + (1 - y) * np.log(1 - _f)
-            return loss
-        return f_loss
+                    likelihood += y * np.log(_f) + (1 - y) * np.log(1 - _f)
+            return likelihood
+        return f_likelihood
