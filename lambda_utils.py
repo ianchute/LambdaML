@@ -46,5 +46,15 @@ class LambdaUtils:
                 _f = f(x,p)
                 if _f > 0 and _f < 1:
                     likelihood += y * np.log(_f) + (1 - y) * np.log(1 - _f)
-            return likelihood
+            return likelihood - LambdaUtils.l2_regularization(p)
         return f_likelihood
+
+    @staticmethod
+    def l2_regularization(p):
+        total = 0
+        for v in p.values():
+            if isinstance(v, Iterable):
+                total += np.abs(v).sum()
+            else:
+                total += np.abs(v)
+        return total
