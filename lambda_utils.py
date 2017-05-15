@@ -56,5 +56,5 @@ class LambdaUtils:
             if isinstance(v, Iterable):
                 total += np.abs(v).sum()
             else:
-                total += np.abs(v)
+                total += np.square(v)
         return total
