@@ -1,11 +1,13 @@
 import numpy as np
 from collections import Iterable
 
+EPSILON = np.finfo(np.float16).eps
+
 class LambdaUtils:
 
     @staticmethod
-    def _prime(f, x, h=np.finfo(np.float16).eps):
-        """Numerically computes the first derivative of f at point x."""
+    def _prime(f, x, h=EPSILON):
+        """Numerically computes the first (symmetric) derivative of f at point x."""
         return (f(x + h) - f(x - h)) / (h * 2)
     
     @staticmethod
@@ -38,7 +40,7 @@ class LambdaUtils:
             return LambdaUtils._prime(LambdaUtils.dependent(f,p,key,X,Y), p[key])
     
     @staticmethod
-    def log_likelihood(f):
+    def log_likelihood(f,l1_factor,l2_factor):
         """Generates the log likelihood function of f"""
         def f_likelihood(p,X,Y):
             likelihood = 0
@@ -46,11 +48,12 @@ class LambdaUtils:
                 _f = f(x,p)
                 if _f > 0 and _f < 1:
                     likelihood += y * np.log(_f) + (1 - y) * np.log(1 - _f)
-            return likelihood - LambdaUtils.l1_regularization(p) - LambdaUtils.l2_regularization(p)
+            return likelihood - l1_factor * LambdaUtils.l1_regularization(p) - l2_factor * LambdaUtils.l2_regularization(p)
         return f_likelihood
 
     @staticmethod
     def l1_regularization(p):
+        """Computes the L1 Regularization Term of the parameter set p"""
         total = 0
         for v in p.values():
             if isinstance(v, Iterable):
@@ -61,6 +64,7 @@ class LambdaUtils:
 
     @staticmethod
     def l2_regularization(p):
+        """Computes the L2 Regularization Term of the parameter set p"""
         total = 0
         for v in p.values():
             if isinstance(v, Iterable):

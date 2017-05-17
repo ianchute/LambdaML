@@ -9,7 +9,7 @@ class LambdaClassifierModel:
     Calling fit will automatically fit all parameters via Maximum Likelihood Estimation.
     Calling predict will return class labels.
     """
-    def __init__(self, f, p):
+    def __init__(self, f, p, l1_factor=0.05, l2_factor=0.01):
         """
         A generic classifier model that accepts a probability function f and a parameter set p.
         f must have results within [0,1] which reflects the probability of being in a class.
@@ -17,7 +17,7 @@ class LambdaClassifierModel:
         """
         self.f = f
         self.p = p
-        self.likelihood = LambdaUtils.log_likelihood(self.f)
+        self.likelihood = LambdaUtils.log_likelihood(self.f, l1_factor, l2_factor)
 
     def fit(self,X,Y,n_iter=10,alpha=0.01):
         """
