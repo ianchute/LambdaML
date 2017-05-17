@@ -18,7 +18,7 @@ def synthesize_data():
 def tanh_regression(x,p):
     """Custom tanh-based regression model."""
     signal = p['w'].dot(x) + p['b']
-    return np.tanh(signal)
+    return (np.tanh(signal) + 1) / 2 # restrict results to unit interval
 
 X,Y = synthesize_data()
 
@@ -31,7 +31,7 @@ model = LambdaClassifierModel(f=tanh_regression, p=p)
 
 # fit the model
 print('before:', model.compute_log_likelihood(X,Y))
-model.fit(X,Y,n_iter=5)
+model.fit(X,Y,n_iter=10)
 print('after:', model.compute_log_likelihood(X,Y))
 
 # predict classes
