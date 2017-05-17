@@ -6,7 +6,7 @@ class LambdaUtils:
     @staticmethod
     def _prime(f, x, h=np.finfo(np.float16).eps):
         """Numerically computes the first derivative of f at point x."""
-        return (f(x + h) - f(x - h)) / h * 2
+        return (f(x + h) - f(x - h)) / (h * 2)
     
     @staticmethod
     def dependent(f,p,key,X,Y):
@@ -64,7 +64,7 @@ class LambdaUtils:
         total = 0
         for v in p.values():
             if isinstance(v, Iterable):
-                total += np.abs(v).sum()
+                total += np.square(v).sum()
             else:
                 total += np.square(v)
         return total
