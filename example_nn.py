@@ -1,19 +1,11 @@
 import numpy as np
+import pandas as pd
 from lambda_model import LambdaClassifierModel
 
-def synthesize_data():
-    """Create fictitious data set consisting of two linearly-separable clusters"""
-    np.random.seed(42)
-    num_observations = 2000
-
-    x1 = np.random.multivariate_normal([0, 0], [[1, .75],[.75, 1]], num_observations)
-    x2 = np.random.multivariate_normal([1, 4], [[1, .75],[.75, 1]], num_observations)
-
-    X = np.vstack((x1, x2)).astype(np.float32)
-    Y = np.hstack((np.zeros(num_observations),
-                                np.ones(num_observations)))
-    
-    return X,Y
+def get_data():
+    """Non-linearly separable data."""
+    circles = pd.read_csv('circles.csv')
+    return circles[['x','y']].values, circles['label'].values
 
 def tanh_neuron(x,p,w_key,b_key):
     """Custom tanh-based regression model."""
@@ -31,7 +23,7 @@ def neural_network(x, p):
     signal = p['wf'].dot(activations) + p['bf']
     return (np.tanh(signal) + 1) / 2
 
-X,Y = synthesize_data()
+X,Y = get_data()
 
 # inital parameters
 p = {
@@ -48,7 +40,7 @@ model = LambdaClassifierModel(f=neural_network, p=p)
 
 # fit the model
 print('before:', model.compute_log_likelihood(X,Y))
-model.fit(X,Y,n_iter=10)
+model.fit(X,Y,n_iter=150)
 print('after:', model.compute_log_likelihood(X,Y))
 
 # predict classes
