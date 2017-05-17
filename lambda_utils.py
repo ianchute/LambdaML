@@ -48,7 +48,14 @@ class LambdaUtils:
                 _f = f(x,p)
                 if _f > 0 and _f < 1:
                     likelihood += y * np.log(_f) + (1 - y) * np.log(1 - _f)
-            return likelihood - l1_factor * LambdaUtils.l1_regularization(p) - l2_factor * LambdaUtils.l2_regularization(p)
+
+            # Encourage parameter sparsity.
+            _l1 = ((l1_factor * LambdaUtils.l1_regularization(p)) if l1_factor > 0 else 0)
+            
+            # Penalize large parameters.
+            _l2 = ((l2_factor * LambdaUtils.l2_regularization(p)) if l2_factor > 0 else 0)
+        
+            return likelihood - _l1 - _l2
         return f_likelihood
 
     @staticmethod
