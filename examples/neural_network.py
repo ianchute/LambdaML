@@ -4,7 +4,7 @@ from lambda_model import LambdaClassifierModel
 
 def get_data():
     """Non-linearly separable data."""
-    circles = pd.read_csv('circles.csv')
+    circles = pd.read_csv('data/circles.csv')
     return circles[['x','y']].values, circles['label'].values
 
 def tanh_neuron(x,p,w_key,b_key):
