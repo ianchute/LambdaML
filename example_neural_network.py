@@ -8,7 +8,7 @@ def get_data():
     return circles[['x','y']].values, circles['label'].values
 
 def tanh_neuron(x,p,w_key,b_key):
-    """Custom tanh-based regression model."""
+    """Neuron with tanh activation."""
     signal = p[w_key].dot(x) + p[b_key]
     return np.tanh(signal)
 
