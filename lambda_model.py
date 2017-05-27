@@ -24,9 +24,16 @@ class LambdaClassifierModel:
         Automatically fit all parameters via Maximum Likelihood Estimation
         """
         p_keys = self.p.keys()
+        updates = {}
         for i in range(n_iter):
+
+            # Acquire updates.
             for key in p_keys:
-                self.p[key] += alpha * LambdaUtils.prime(self.likelihood,self.p,key,X,Y)
+                updates[key] = alpha * LambdaUtils.prime(self.likelihood,self.p,key,X,Y)
+            
+            # Apply updates.
+            for key in p_keys:
+                self.p[key] += updates[key]
     
     def compute_log_likelihood(self,X,Y):
         """

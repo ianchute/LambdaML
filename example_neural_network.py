@@ -2,32 +2,31 @@ import numpy as np
 import pandas as pd
 from lambda_model import LambdaClassifierModel
 
+np.random.seed(1)
+
 def get_data():
     """Non-linearly separable data."""
     circles = pd.read_csv('data/circles.csv')
     return circles[['x','y']].values, circles['label'].values
 
 def neuron(x,p,w_key,b_key):
-    """Neuron with ReLU activation."""
+    """Exponential Linear Unit."""
     signal = p[w_key].dot(x) + p[b_key]
-    return np.max([0, signal])
 
-def hidden_layer_1(x, p):
+    if signal >= 0:
+        return signal
+    else:
+        return 0.01 * (np.exp(signal) - 1)
+
+def hidden_layer(x, p):
     return [
         neuron(x,p,'w1','b1'),
         neuron(x,p,'w2','b2'),
     ]
 
-def hidden_layer_2(x, p):
-    return [
-        neuron(x,p,'w3','b3'),
-        neuron(x,p,'w4','b4'),
-    ]
-
 def neural_network(x, p):
-    activations_1 = hidden_layer_1(x,p)
-    activations_2 = hidden_layer_2(activations_1,p)
-    signal = p['wf'].dot(activations_2) + p['bf']
+    activations = hidden_layer(x,p)
+    signal = p['wf'].dot(activations) + p['bf']
     return (np.tanh(signal) + 1) / 2
 
 X,Y = get_data()
@@ -39,11 +38,6 @@ p = {
     'w2': np.array([np.random.uniform() for i in range(len(X[0]))]),
     'b2': np.random.uniform(),
 
-    'w3': np.array([np.random.uniform() for i in range(len(X[0]))]),
-    'b3': np.random.uniform(),
-    'w4': np.array([np.random.uniform() for i in range(len(X[0]))]),
-    'b4': np.random.uniform(),
-
     'wf': np.array([np.random.uniform() for i in range(len(X[0]))]),
     'bf': np.random.uniform(),
 }
@@ -53,7 +47,7 @@ model = LambdaClassifierModel(f=neural_network, p=p)
 
 # fit the model
 print('before:', model.compute_log_likelihood(X,Y))
-model.fit(X,Y,n_iter=150)
+model.fit(X,Y,n_iter=200)
 print('after:', model.compute_log_likelihood(X,Y))
 
 # predict classes
