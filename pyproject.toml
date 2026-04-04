@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lambdaml"
-version = "1.0.2"
+version = "1.0.3"
 description = "Gradient-free machine learning for any numpy-compatible function"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -13,7 +13,8 @@ requires-python = ">=3.8"
 dependencies = ["numpy>=1.21"]
 
 [project.optional-dependencies]
-examples = ["scipy", "pandas", "matplotlib"]
+progress = ["tqdm>=4.0"]
+examples = ["scipy", "pandas", "matplotlib", "tqdm>=4.0"]
 
 [project.urls]
 Repository = "https://github.com/ianchute/LambdaML"

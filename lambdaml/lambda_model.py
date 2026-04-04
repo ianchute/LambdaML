@@ -40,6 +40,12 @@ Original bug 4 — For array parameters, the gradient loop created a closure
 """
 
 import numpy as np
+try:
+    from tqdm.auto import tqdm as _tqdm
+    _TQDM_AVAILABLE = True
+except ImportError:
+    _TQDM_AVAILABLE = False
+
 from .lambda_utils import (
     GradientComputer, DiffMethod,
     Regularization, LossFunctions, LRSchedule
@@ -141,6 +147,7 @@ class _LambdaBaseModel:
         beta2=0.999,
         adam_eps=1e-8,
         lr_schedule=None,
+        vectorized=False,       # if True, f(X, p) must accept the full X matrix
     ):
         self.f             = f
         self.p             = {k: (np.array(v, dtype=float) if isinstance(v, (list, tuple))
@@ -158,6 +165,7 @@ class _LambdaBaseModel:
         self.beta2         = beta2
         self.adam_eps      = adam_eps
         self.lr_schedule   = lr_schedule or (lambda lr0, t: lr0)  # constant
+        self.vectorized    = vectorized
 
         self._gc = GradientComputer(method=diff_method, h=diff_h)
         self._opt_state = _OptimizerState(self.p)
@@ -191,9 +199,26 @@ class _LambdaBaseModel:
     # Prediction (subclasses implement _predict_batch)
     # ------------------------------------------------------------------
 
-    def _predict_batch(self, X, p):
-        """Return array of predictions for all rows in X."""
-        return np.array([self.f(x, p) for x in X])
+    def _predict_batch(self, X, p, show_progress=False, progress_desc="Predicting"):
+        """
+        Return array of predictions for all rows in X.
+
+        If self.vectorized=True, calls f(X, p) once (X is the full matrix).
+        Otherwise loops per sample, optionally showing a tqdm progress bar.
+
+        Parameters
+        ----------
+        show_progress : bool  — show a per-sample tqdm bar (ignored when vectorized)
+        progress_desc : str   — label shown on the bar
+        """
+        if self.vectorized:
+            return np.asarray(self.f(X, p), dtype=float)
+
+        if show_progress and _TQDM_AVAILABLE:
+            samples = _tqdm(X, desc=progress_desc, unit="sample", leave=False)
+        else:
+            samples = X
+        return np.array([self.f(x, p) for x in samples])
 
     # ------------------------------------------------------------------
     # Loss (subclasses override _loss_fn)
@@ -234,6 +259,8 @@ class _LambdaBaseModel:
         tol=1e-6,
         verbose=False,
         validation_data=None,
+        progress_bar=True,
+        eval_every=1,
     ):
         """
         Fit parameters by minimizing the objective.
@@ -250,10 +277,26 @@ class _LambdaBaseModel:
         tol          : float — minimum improvement threshold
         verbose      : bool — print loss every 10 iterations
         validation_data : tuple (X_val, Y_val) or None
+        progress_bar : bool — show a tqdm progress bar over epochs (default True)
+        eval_every   : int  — compute and log loss every N epochs (default 1).
+                       Increase (e.g. 10) to skip expensive full-data evaluations
+                       and significantly speed up training.
 
         Returns
         -------
         self
+
+        Speed tips
+        ----------
+        The main cost is O(n_params * diff_evals * n_samples) per epoch.
+        To speed up training:
+          • Increase eval_every (e.g. eval_every=10) — avoids a full forward pass
+            every epoch just for loss tracking.
+          • Use batch_size to reduce samples per gradient step.
+          • Set vectorized=True on the model and write f(X, p) to accept the full
+            matrix — eliminates the Python loop over samples.
+          • Use DiffMethod.FORWARD (1 eval/param) instead of CENTRAL (2 evals/param)
+            if you can tolerate slightly noisier gradients.
         """
         X = np.asarray(X, dtype=float)
         Y = np.asarray(Y, dtype=float)
@@ -262,8 +305,15 @@ class _LambdaBaseModel:
         best_loss = np.inf
         no_improve = 0
         self.loss_history = []
+        loss = np.nan  # sentinel before first eval
 
-        for epoch in range(n_iter):
+        epoch_iter = range(n_iter)
+        pbar = None
+        if progress_bar and _TQDM_AVAILABLE:
+            pbar = _tqdm(epoch_iter, desc="Fitting", unit="epoch")
+            epoch_iter = pbar
+
+        for epoch in epoch_iter:
             current_lr = self.lr_schedule(lr, epoch)
 
             # ---- Mini-batch sampling ----
@@ -281,29 +331,35 @@ class _LambdaBaseModel:
                 epsilon=self.adam_eps,
             )
 
-            # ---- Track loss (always on full data for consistency) ----
-            if validation_data is not None:
-                X_v, Y_v = validation_data
-                loss = self._objective(self.p, np.asarray(X_v, float), np.asarray(Y_v, float))
-            else:
-                loss = self._objective(self.p, X, Y)
-
-            self.loss_history.append(loss)
-
-            if verbose and epoch % 10 == 0:
-                print(f"Epoch {epoch:5d}  loss={loss:.6f}  lr={current_lr:.2e}")
-
-            # ---- Early stopping ----
-            if early_stopping:
-                if best_loss - loss > tol:
-                    best_loss = loss
-                    no_improve = 0
+            # ---- Track loss (skip if not an eval epoch) ----
+            if epoch % eval_every == 0:
+                if validation_data is not None:
+                    X_v, Y_v = validation_data
+                    loss = self._objective(self.p, np.asarray(X_v, float), np.asarray(Y_v, float))
                 else:
-                    no_improve += 1
-                if no_improve >= patience:
-                    if verbose:
-                        print(f"Early stopping at epoch {epoch} (no improvement for {patience} steps)")
-                    break
+                    loss = self._objective(self.p, X, Y)
+                self.loss_history.append(loss)
+
+                if pbar is not None:
+                    pbar.set_postfix(loss=f"{loss:.6f}", lr=f"{current_lr:.2e}")
+
+                if verbose and epoch % max(eval_every, 10) == 0:
+                    print(f"Epoch {epoch:5d}  loss={loss:.6f}  lr={current_lr:.2e}")
+
+                # ---- Early stopping ----
+                if early_stopping:
+                    if best_loss - loss > tol:
+                        best_loss = loss
+                        no_improve = 0
+                    else:
+                        no_improve += 1
+                    if no_improve >= patience:
+                        if verbose:
+                            print(f"Early stopping at epoch {epoch} (no improvement for {patience} steps)")
+                        break
+
+        if pbar is not None:
+            pbar.close()
 
         return self
 
@@ -349,14 +405,29 @@ class LambdaClassifierModel(_LambdaBaseModel):
     def _loss_fn(self, y_pred, y_true):
         return LossFunctions.binary_cross_entropy(y_pred, y_true)
 
-    def predict_proba(self, X):
-        """Return P(y=1|x) for each sample."""
-        X = np.asarray(X, dtype=float)
-        return self._predict_batch(X, self.p)
+    def predict_proba(self, X, progress_bar=False):
+        """
+        Return P(y=1|x) for each sample.
 
-    def predict(self, X, threshold=0.5):
-        """Return binary class labels (0 or 1)."""
-        return (self.predict_proba(X) >= threshold).astype(int)
+        Parameters
+        ----------
+        progress_bar : bool — show a per-sample tqdm bar (default False)
+        """
+        X = np.asarray(X, dtype=float)
+        return self._predict_batch(X, self.p,
+                                   show_progress=progress_bar,
+                                   progress_desc="Predicting proba")
+
+    def predict(self, X, threshold=0.5, progress_bar=False):
+        """
+        Return binary class labels (0 or 1).
+
+        Parameters
+        ----------
+        threshold    : float — decision boundary (default 0.5)
+        progress_bar : bool  — show a per-sample tqdm bar (default False)
+        """
+        return (self.predict_proba(X, progress_bar=progress_bar) >= threshold).astype(int)
 
     def score(self, X, Y):
         """Classification accuracy."""
@@ -417,10 +488,18 @@ class LambdaRegressorModel(_LambdaBaseModel):
             return LossFunctions.huber(y_pred, y_true, self._huber_delta)
         return self._LOSS_FNS[self._loss_name](y_pred, y_true)
 
-    def predict(self, X):
-        """Return continuous predictions."""
+    def predict(self, X, progress_bar=False):
+        """
+        Return continuous predictions.
+
+        Parameters
+        ----------
+        progress_bar : bool — show a per-sample tqdm bar (default False)
+        """
         X = np.asarray(X, dtype=float)
-        return self._predict_batch(X, self.p)
+        return self._predict_batch(X, self.p,
+                                   show_progress=progress_bar,
+                                   progress_desc="Predicting")
 
     def score(self, X, Y):
         """R² score."""
