@@ -10,11 +10,8 @@ Highlights:
   • R² score on held-out test set
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
-from lambda_model import LambdaRegressorModel, Optimizer
-from lambda_utils import DiffMethod, LRSchedule
+from lambdaml import LambdaRegressorModel, Optimizer, DiffMethod, LRSchedule
 
 
 

@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "lambdaml"
+version = "1.0.1"
+description = "Gradient-free machine learning for any numpy-compatible function"
+readme = "README.md"
+license = { file = "LICENSE" }
+authors = [{ name = "Ian Chu Te" }]
+requires-python = ">=3.8"
+dependencies = ["numpy>=1.21"]
+
+[project.optional-dependencies]
+examples = ["scipy", "pandas", "matplotlib"]
+
+[project.urls]
+Repository = "https://github.com/your-username/LambdaML"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["lambdaml*"]

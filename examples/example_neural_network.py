@@ -17,12 +17,9 @@ Key differences from the legacy version
 • Train/test split + accuracy reported on held-out data
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import pandas as pd
-from lambda_model import LambdaClassifierModel, Optimizer
-from lambda_utils import DiffMethod, LRSchedule
+from lambdaml import LambdaClassifierModel, Optimizer, DiffMethod, LRSchedule
 
 
 def get_data():

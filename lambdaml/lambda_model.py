@@ -40,7 +40,7 @@ Original bug 4 — For array parameters, the gradient loop created a closure
 """
 
 import numpy as np
-from lambda_utils import (
+from .lambda_utils import (
     GradientComputer, DiffMethod,
     Regularization, LossFunctions, LRSchedule
 )

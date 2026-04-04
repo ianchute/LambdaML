@@ -1,5 +1,4 @@
 # LambdaML
-### By Ian Chu Te
 
 **Gradient-free machine learning. Give it any function; it learns the parameters.**
 
@@ -10,15 +9,12 @@ LambdaML lets you use *any numpy-compatible function* as your model and automati
 ## Quick-start
 
 ```bash
-git clone https://github.com/your-username/LambdaML.git
-cd LambdaML
-pip install numpy scipy pandas matplotlib
+pip install lambdaml
 ```
 
 ```python
 import numpy as np
-from lambda_model import LambdaClassifierModel, Optimizer
-from lambda_utils import DiffMethod, LRSchedule
+from lambdaml import LambdaClassifierModel, Optimizer, DiffMethod, LRSchedule
 
 # 1. Write your model — anything numpy-compatible works
 def my_model(x, p):
@@ -216,8 +212,11 @@ Konkret use cases for Kaggling: fitting domain equations with unknown parameters
 
 ```
 LambdaML/
-├── lambda_model.py          # LambdaClassifierModel, LambdaRegressorModel, Optimizer
-├── lambda_utils.py          # NumericalDiff, GradientComputer, Regularization, LossFunctions, LRSchedule
+├── lambdaml/                # Installable package (pip install lambdaml)
+│   ├── __init__.py
+│   ├── lambda_model.py      # LambdaClassifierModel, LambdaRegressorModel, Optimizer
+│   └── lambda_utils.py      # NumericalDiff, GradientComputer, Regularization, LossFunctions, LRSchedule
+├── pyproject.toml           # Package metadata
 ├── LambdaML_Showcase.ipynb  # Interactive notebook with all charts
 ├── examples/
 │   ├── example_tanh_regression.py

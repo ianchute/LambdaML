@@ -14,12 +14,9 @@ Methods compared
   RICHARDSON   — O(h⁴) via Richardson extrapolation, 4 f-evals per param
 """
 
-import sys, os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import numpy as np
 import time
-from lambda_model import LambdaClassifierModel, Optimizer
-from lambda_utils import DiffMethod
+from lambdaml import LambdaClassifierModel, Optimizer, DiffMethod
 
 
 
