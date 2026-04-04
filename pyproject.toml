@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lambdaml"
-version = "1.0.1"
+version = "1.0.2"
 description = "Gradient-free machine learning for any numpy-compatible function"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -16,7 +16,7 @@ dependencies = ["numpy>=1.21"]
 examples = ["scipy", "pandas", "matplotlib"]
 
 [project.urls]
-Repository = "https://github.com/your-username/LambdaML"
+Repository = "https://github.com/ianchute/LambdaML"
 
 [tool.setuptools.packages.find]
 where = ["."]
