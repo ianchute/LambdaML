@@ -9,9 +9,9 @@ LambdaML lets you use *any numpy-compatible function* as your model and automati
 ## Quick-start
 
 ```bash
-pip install lambdaml
-# With progress bars:
-pip install lambdaml[progress]
+pip install lambdaml           # core (numpy only)
+pip install lambdaml[speed]    # + tqdm progress bars + joblib parallelism (recommended)
+pip install lambdaml[examples] # + scipy, pandas, matplotlib for the notebook
 ```
 
 ```python
@@ -33,6 +33,7 @@ model = LambdaClassifierModel(
     l2_factor=0.001,
     optimizer=Optimizer.ADAM,
     lr_schedule=LRSchedule.cosine_annealing(T_max=100),
+    n_jobs=-1,   # parallel gradient computation across parameters (requires joblib)
 )
 model.fit(X_train, Y_train, n_iter=100, lr=0.01,
           early_stopping=True, patience=10)
@@ -47,26 +48,33 @@ See the [`examples/`](examples/) folder for runnable scripts and [`LambdaML_Show
 
 ---
 
-## What's new in v1.0.3
+## What's new in v1.1.0
 
-**Progress bars** — `fit()` shows a live tqdm epoch bar with loss and lr in the postfix. `predict()` / `predict_proba()` accept `progress_bar=True` for a per-sample bar.
+**Modify-and-restore gradient computation** — the single biggest internal speedup. Previously, every single parameter perturbation during gradient computation made a full deep copy of the entire parameter dictionary. Now the library perturbs one value in-place, evaluates, and restores — zero unnecessary copies. 2–5× speedup on the gradient step alone.
 
-**`eval_every`** — the hidden cost of training was a full forward pass on the entire dataset every epoch just to log the loss. Set `eval_every=10` to evaluate only every 10th epoch — no effect on gradient updates, but can cut training time significantly.
+**Cached skip set & optimizer dispatch** — the regularization skip set (which parameters to exclude) and the optimizer update function are both resolved once at model construction time. Previously they were recomputed or re-dispatched via string comparison on every step of every epoch.
 
-**`vectorized=True`** — if your `f` can accept the full `X` matrix at once (any pure-numpy function already can), set `vectorized=True` to eliminate the Python sample loop and get a 2–10× speedup.
+**Single-pass regularization** — when both L1 and L2 are active, the penalty is now computed in a single loop over parameters (was two separate passes before).
+
+**`eval_every=10` by default** — each loss evaluation is a full forward pass over your entire dataset. Defaulting to every-10-epochs avoids 90% of those evaluations out of the box, with no effect on gradient quality.
+
+**`n_jobs` — parallel gradient computation** — set `n_jobs=-1` to use all CPU cores. Each parameter's gradient is independent of every other, so this is embarrassingly parallel. Requires `joblib` (`pip install lambdaml[speed]`).
 
 ```python
-# Standard (per-sample loop)
-def f(x, p):
-    return p['w'].dot(x) + p['b']
-
-# Vectorized (full matrix at once — much faster)
-def f(X, p):
+# All v1.1.0 speed features together:
+def f(X, p):                         # vectorized: accepts full matrix
     return X @ p['w'] + p['b']
 
-model = LambdaRegressorModel(f=f, p={...}, vectorized=True)
-model.fit(X, Y, n_iter=200, lr=0.01, eval_every=10)   # progress bar on by default
+model = LambdaRegressorModel(
+    f=f,
+    p={'w': np.zeros(10), 'b': 0.0},
+    vectorized=True,   # eliminates Python sample loop
+    n_jobs=-1,         # parallelise gradient across parameters
+)
+model.fit(X, Y, n_iter=200, lr=0.01, eval_every=50)
 ```
+
+**v1.0.3 additions** (still available): progress bars (`progress_bar=True` on `fit`/`predict`), `eval_every` parameter, `vectorized=True` mode.
 
 ---
 
@@ -89,10 +97,6 @@ LambdaML supports six methods with different accuracy/cost trade-offs:
 | **Complex-Step** | O(h²) | 1 (complex) | **Recommended** — no cancellation error |
 | Richardson | O(h⁴) | 4 | High accuracy, no complex inputs needed |
 
-![Derivative methods comparison](assets/fig_derivative_methods.png)
-
-*Left: all six estimates on a known function. Right: absolute error vs step size h — complex-step never hits the cancellation-error floor.*
-
 **Is it tractable?** Yes, for models up to ~10k parameters. Each gradient step costs O(n_params) forward passes instead of O(1) for analytic backprop. For small-to-medium models on a CPU+numpy backend this is entirely practical.
 
 ---
@@ -103,8 +107,10 @@ The main cost per epoch is `n_params × diff_evals × n_samples` calls to `f`. T
 
 | Technique | How | Typical gain |
 |---|---|---|
-| `eval_every=N` | Skip loss re-evaluation on most epochs | ~1.5–2× |
-| `vectorized=True` | Write `f(X, p)` to accept the full matrix | 2–10× |
+| Modify-and-restore *(v1.1.0, automatic)* | No dict copies during gradient computation | 2–5× |
+| `n_jobs=-1` *(v1.1.0)* | Parallel gradient across parameters via joblib | ~N_cores× |
+| `vectorized=True` *(v1.0.3)* | Write `f(X, p)` to accept the full matrix | 2–10× |
+| `eval_every=50` | Skip loss re-evaluation on most epochs | ~1.5–2× |
 | `batch_size=N` | Mini-batch gradient steps | Scales with batch ratio |
 | `DiffMethod.FORWARD` | 1 f-eval/param instead of 2 | ~1.5× (noisier grads) |
 
@@ -112,69 +118,7 @@ The main cost per epoch is `n_params × diff_evals × n_samples` calls to `f`. T
 
 ## The lambda can be any function
 
-Six completely different model functions, one `.fit()` call:
-
-![Decision boundaries](assets/fig_decision_boundaries.png)
-
-From top-left: logistic regression, tanh, sine activation (non-standard), Gaussian RBF, softplus, and a physics-inspired decay+oscillation model `σ(a·exp(−λ|x₀|)·cos(ω·x₁+φ))` — the kind of thing nobody derives analytically.
-
----
-
-## Neural network with numerically computed gradients
-
-A 2-layer ELU network on non-linearly separable data, fitted entirely via finite-difference backprop. No `autograd`, no `torch`, no chain rule.
-
-![Neural network training](assets/fig_neural_network.png)
-
-*Clockwise from top-left: log-loss curve, final decision boundary, weight trajectories for hidden and output layers, bias evolution across epochs.*
-
----
-
-## Regression — recovering true sine parameters
-
-Starting from wrong values (a=2.5, ω=0.4, φ=1.8, c=−1) on outlier-corrupted data, the optimizer converges back to the true parameters using pseudo-Huber loss (complex-step safe).
-
-![Sine regression](assets/fig_sine_regression.png)
-
----
-
-## Optimizer comparison
-
-SGD vs Momentum vs RMSProp vs Adam on the same logistic task:
-
-![Optimizer comparison](assets/fig_optimizers.png)
-
----
-
-## Derivative method benchmark
-
-All 6 methods on the same problem — speed, accuracy, and Pareto trade-off:
-
-![Diff method benchmark](assets/fig_diff_benchmark.png)
-
----
-
-## Regularization — L1 vs L2
-
-With the corrected L1 formula (`Σ|θ|` not `Σθ` — a bug in the original), L1 now induces true sparsity on a 10-feature problem where only features 0 and 1 matter:
-
-![Regularization](assets/fig_regularization.png)
-
----
-
-## Learning rate schedules
-
-Five schedules visualised and compared for convergence speed:
-
-![LR schedules](assets/fig_lr_schedules.png)
-
----
-
-## Gradient accuracy verification
-
-Per-component absolute error vs an analytically known gradient — complex-step and Richardson hit near-machine-precision:
-
-![Gradient accuracy](assets/fig_gradient_accuracy.png)
+Six completely different model functions, one `.fit()` call — logistic regression, tanh, sine activation (non-standard), Gaussian RBF, softplus, and a physics-inspired decay+oscillation model `σ(a·exp(−λ|x₀|)·cos(ω·x₁+φ))`. See `LambdaML_Showcase.ipynb` for visualisations and benchmarks.
 
 ---
 
@@ -194,6 +138,7 @@ Per-component absolute error vs an analytically known gradient — complex-step 
 | `optimizer` | `Optimizer.ADAM` | `sgd`, `momentum`, `rmsprop`, `adam` |
 | `lr_schedule` | `None` (constant) | Learning rate schedule callable |
 | `vectorized` | `False` | If `True`, `f` receives the full `X` matrix — faster |
+| `n_jobs` | `1` | Parallel gradient workers; `-1` = all cores (requires `joblib`) |
 
 **`.fit(X, Y, ...)`**
 
@@ -205,10 +150,10 @@ Per-component absolute error vs an analytically known gradient — complex-step 
 | `early_stopping` | `False` | Stop if loss stalls for `patience` steps |
 | `patience` | `10` | Early stopping patience |
 | `tol` | `1e-6` | Minimum improvement threshold |
-| `verbose` | `False` | Print loss every 10 iterations |
+| `verbose` | `False` | Print loss every `eval_every` iterations |
 | `validation_data` | `None` | `(X_val, Y_val)` tuple |
 | `progress_bar` | `True` | Show tqdm epoch bar (requires `tqdm`) |
-| `eval_every` | `1` | Evaluate loss every N epochs — increase for speed |
+| `eval_every` | `10` | Evaluate loss every N epochs — each eval is a full forward pass |
 
 **Other methods:** `.predict(X, progress_bar=False)` · `.predict_proba(X, progress_bar=False)` · `.score(X, Y)` · `.compute_loss(X, Y)` · `.get_params()` · `.loss_history`
 
@@ -239,6 +184,17 @@ LRSchedule.warmup_cosine(warmup=10, T_max=100)
 ```
 
 ---
+
+## Performance improvements over original
+
+| Change | Original | v1.1.0 |
+|---|---|---|
+| Gradient dict copies | Full dict copy per parameter element | Modify-and-restore — zero copies |
+| Regularization passes | 1–2 passes per epoch (separate L1/L2 loops) | Single pass regardless of combination |
+| Optimizer dispatch | String compare per parameter per step | Function resolved once at init |
+| Skip set computation | Rebuilt from scratch every epoch | Cached frozenset at init |
+| Default loss eval frequency | Every epoch (`eval_every=1`) | Every 10 epochs (`eval_every=10`) |
+| Gradient parallelism | Sequential across all parameters | Optional: `n_jobs=-1` uses all CPU cores |
 
 ## Bug fixes from the original library
 
@@ -277,7 +233,6 @@ LambdaML/
 │   ├── example_neural_network.py
 │   ├── example_diff_methods.py
 │   └── example_regressor.py
-├── assets/                  # Notebook-generated figures for README
 ├── data/
 │   └── circles.csv
 └── legacy/                  # Original library files (pre-rewrite)
