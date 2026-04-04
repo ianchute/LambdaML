@@ -10,6 +10,8 @@ LambdaML lets you use *any numpy-compatible function* as your model and automati
 
 ```bash
 pip install lambdaml
+# With progress bars:
+pip install lambdaml[progress]
 ```
 
 ```python
@@ -33,7 +35,7 @@ model = LambdaClassifierModel(
     lr_schedule=LRSchedule.cosine_annealing(T_max=100),
 )
 model.fit(X_train, Y_train, n_iter=100, lr=0.01,
-          early_stopping=True, patience=10, verbose=True)
+          early_stopping=True, patience=10)
 
 print(model.score(X_test, Y_test))       # accuracy
 print(model.predict_proba(X_test))       # probabilities
@@ -41,7 +43,30 @@ print(model.predict_proba(X_test))       # probabilities
 
 For regression, swap in `LambdaRegressorModel` with `loss='mse'`, `'mae'`, `'huber'`, or `'pseudo_huber'`.
 
-See the [`examples/`](examples/) folder for runnable scripts and the [`LambdaML_Showcase.ipynb`](LambdaML_Showcase.ipynb) notebook for an interactive walkthrough with charts.
+See the [`examples/`](examples/) folder for runnable scripts and [`LambdaML_Showcase.ipynb`](LambdaML_Showcase.ipynb) for an interactive walkthrough with charts.
+
+---
+
+## What's new in v1.0.3
+
+**Progress bars** — `fit()` shows a live tqdm epoch bar with loss and lr in the postfix. `predict()` / `predict_proba()` accept `progress_bar=True` for a per-sample bar.
+
+**`eval_every`** — the hidden cost of training was a full forward pass on the entire dataset every epoch just to log the loss. Set `eval_every=10` to evaluate only every 10th epoch — no effect on gradient updates, but can cut training time significantly.
+
+**`vectorized=True`** — if your `f` can accept the full `X` matrix at once (any pure-numpy function already can), set `vectorized=True` to eliminate the Python sample loop and get a 2–10× speedup.
+
+```python
+# Standard (per-sample loop)
+def f(x, p):
+    return p['w'].dot(x) + p['b']
+
+# Vectorized (full matrix at once — much faster)
+def f(X, p):
+    return X @ p['w'] + p['b']
+
+model = LambdaRegressorModel(f=f, p={...}, vectorized=True)
+model.fit(X, Y, n_iter=200, lr=0.01, eval_every=10)   # progress bar on by default
+```
 
 ---
 
@@ -69,6 +94,19 @@ LambdaML supports six methods with different accuracy/cost trade-offs:
 *Left: all six estimates on a known function. Right: absolute error vs step size h — complex-step never hits the cancellation-error floor.*
 
 **Is it tractable?** Yes, for models up to ~10k parameters. Each gradient step costs O(n_params) forward passes instead of O(1) for analytic backprop. For small-to-medium models on a CPU+numpy backend this is entirely practical.
+
+---
+
+## Speed tips
+
+The main cost per epoch is `n_params × diff_evals × n_samples` calls to `f`. To reduce it:
+
+| Technique | How | Typical gain |
+|---|---|---|
+| `eval_every=N` | Skip loss re-evaluation on most epochs | ~1.5–2× |
+| `vectorized=True` | Write `f(X, p)` to accept the full matrix | 2–10× |
+| `batch_size=N` | Mini-batch gradient steps | Scales with batch ratio |
+| `DiffMethod.FORWARD` | 1 f-eval/param instead of 2 | ~1.5× (noisier grads) |
 
 ---
 
@@ -146,7 +184,7 @@ Per-component absolute error vs an analytically known gradient — complex-step 
 
 | Parameter | Default | Description |
 |---|---|---|
-| `f` | — | Model: `f(x, p) → float ∈ (0,1)` |
+| `f` | — | Model: `f(x, p) → float ∈ (0,1)` — or `f(X, p) → array` when `vectorized=True` |
 | `p` | — | Parameter dict (scalars or numpy arrays) |
 | `diff_method` | `DiffMethod.CENTRAL` | Finite-difference method |
 | `diff_h` | `None` | Custom step size (None = optimal default per method) |
@@ -155,8 +193,24 @@ Per-component absolute error vs an analytically known gradient — complex-step 
 | `regularize_bias` | `False` | Whether to regularize `b*` params |
 | `optimizer` | `Optimizer.ADAM` | `sgd`, `momentum`, `rmsprop`, `adam` |
 | `lr_schedule` | `None` (constant) | Learning rate schedule callable |
+| `vectorized` | `False` | If `True`, `f` receives the full `X` matrix — faster |
 
-**Methods:** `.fit(X, Y, n_iter, lr, batch_size, early_stopping, patience, verbose, validation_data)` · `.predict(X)` · `.predict_proba(X)` · `.score(X, Y)` · `.compute_loss(X, Y)` · `.loss_history`
+**`.fit(X, Y, ...)`**
+
+| Parameter | Default | Description |
+|---|---|---|
+| `n_iter` | `100` | Max gradient steps |
+| `lr` | `0.01` | Initial learning rate |
+| `batch_size` | `None` | Mini-batch size; `None` = full batch |
+| `early_stopping` | `False` | Stop if loss stalls for `patience` steps |
+| `patience` | `10` | Early stopping patience |
+| `tol` | `1e-6` | Minimum improvement threshold |
+| `verbose` | `False` | Print loss every 10 iterations |
+| `validation_data` | `None` | `(X_val, Y_val)` tuple |
+| `progress_bar` | `True` | Show tqdm epoch bar (requires `tqdm`) |
+| `eval_every` | `1` | Evaluate loss every N epochs — increase for speed |
+
+**Other methods:** `.predict(X, progress_bar=False)` · `.predict_proba(X, progress_bar=False)` · `.score(X, Y)` · `.compute_loss(X, Y)` · `.get_params()` · `.loss_history`
 
 ### `LambdaRegressorModel(f, p, loss='mse', **kwargs)`
 
@@ -165,7 +219,7 @@ Per-component absolute error vs an analytically known gradient — complex-step 
 | `loss` | `'mse'` | `'mse'`, `'mae'`, `'huber'`, `'pseudo_huber'` |
 | `huber_delta` | `1.0` | Threshold for Huber / pseudo-Huber |
 
-**Methods:** `.fit(...)` · `.predict(X)` · `.score(X, Y)` (R²)
+**Methods:** `.fit(...)` · `.predict(X, progress_bar=False)` · `.score(X, Y)` (R²)
 
 ### `DiffMethod` · `Optimizer` · `LRSchedule`
 
@@ -204,7 +258,7 @@ LRSchedule.warmup_cosine(warmup=10, T_max=100)
 
 The core insight: LambdaML *decouples your model definition from gradient computation*. Anywhere you want a custom functional form but don't want to derive its gradients by hand, LambdaML fills that gap.
 
-Konkret use cases for Kaggling: fitting domain equations with unknown parameters (physics-based pricing, pharmacokinetics, decay curves); directly optimising non-differentiable competition metrics (NDCG, F-beta, Cohen's kappa) as the loss function; building exotic meta-learners in stacking ensembles; small-data + custom hypothesis problems where sklearn doesn't have your model form.
+Concrete use cases: fitting domain equations with unknown parameters (physics-based pricing, pharmacokinetics, decay curves); directly optimising non-differentiable competition metrics (NDCG, F-beta, Cohen's kappa) as the loss function; building exotic meta-learners in stacking ensembles; small-data + custom hypothesis problems where sklearn doesn't have your model form.
 
 ---
 
@@ -223,16 +277,7 @@ LambdaML/
 │   ├── example_neural_network.py
 │   ├── example_diff_methods.py
 │   └── example_regressor.py
-├── assets/
-│   ├── fig_decision_boundaries.png
-│   ├── fig_derivative_methods.png
-│   ├── fig_diff_benchmark.png
-│   ├── fig_gradient_accuracy.png
-│   ├── fig_lr_schedules.png
-│   ├── fig_neural_network.png
-│   ├── fig_optimizers.png
-│   ├── fig_regularization.png
-│   └── fig_sine_regression.png
+├── assets/                  # Notebook-generated figures for README
 ├── data/
 │   └── circles.csv
 └── legacy/                  # Original library files (pre-rewrite)
