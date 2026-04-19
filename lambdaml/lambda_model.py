@@ -68,6 +68,7 @@ from .lambda_utils import (
     GradientComputer, DiffMethod,
     Regularization, LossFunctions, LRSchedule
 )
+from . import lambda_onnx as _onnx_module
 
 
 # ──────────────────────────────────────────────────────────────────────────────
@@ -527,6 +528,101 @@ class _LambdaBaseModel:
         """Return a copy of the current parameter dict."""
         return {k: (v.copy() if isinstance(v, np.ndarray) else v)
                 for k, v in self.p.items()}
+
+    # ------------------------------------------------------------------
+    # ONNX export / import
+    # ------------------------------------------------------------------
+
+    def to_onnx(self, path=None, *, input_shape, input_name="X", opset=17):
+        """
+        Export this model to ONNX format.
+
+        Requires the model to have been created with ``vectorized=True`` and
+        the function ``f(X, p)`` to use standard numpy operations (matmul,
+        exp, tanh, sin, etc.) that the tracer can convert to ONNX nodes.
+
+        Parameters
+        ----------
+        path        : str or None
+            File path to write the ``.onnx`` file.  Returns the proto without
+            writing if None.
+        input_shape : tuple
+            Shape of a *single* input sample, e.g. ``(2,)`` for 2 features.
+            The batch dimension is added automatically (dynamic).
+        input_name  : str
+            Name of the ONNX input tensor (default ``"X"``).
+        opset       : int
+            ONNX opset version (default 17).
+
+        Returns
+        -------
+        onnx.ModelProto
+
+        Raises
+        ------
+        OnnxTraceError
+            If the model is not vectorized or uses unsupported numpy ops.
+        ImportError
+            If ``onnx`` is not installed (``pip install lambdaml[onnx]``).
+
+        Examples
+        --------
+        >>> proto = model.to_onnx('model.onnx', input_shape=(2,))
+
+        See Also
+        --------
+        save_params : always-works alternative that saves weights as ``.npz``.
+        """
+        return _onnx_module.to_onnx(
+            self, path,
+            input_shape=input_shape,
+            input_name=input_name,
+            opset=opset,
+        )
+
+    def save_params(self, path, **metadata):
+        """
+        Save model parameters to a compressed ``.npz`` file.
+
+        This always works — no ONNX tracing, no vectorized requirement.
+        On load you must reconstruct the model (same ``f`` and initial ``p``
+        structure) and call ``load_params()`` to restore weights.
+
+        Parameters
+        ----------
+        path     : str — output file path (adds ``.npz`` if missing).
+        **metadata : extra values to store (e.g. ``model_type='classifier'``).
+
+        Examples
+        --------
+        >>> model.save_params('weights.npz')
+        >>> model2.load_params('weights.npz')   # restore into a fresh instance
+        """
+        _onnx_module.save_params(self, path, **metadata)
+
+    def load_params(self, path):
+        """
+        Load parameters from a ``.npz`` file saved by ``save_params()``.
+
+        The model must have been constructed with the same parameter keys.
+        Updates ``self.p`` in-place and returns ``self``.
+
+        Parameters
+        ----------
+        path : str — path to the ``.npz`` file.
+
+        Returns
+        -------
+        self
+
+        Examples
+        --------
+        >>> model2 = LambdaClassifierModel(f=my_f, p=p_init, vectorized=True)
+        >>> model2.load_params('weights.npz')
+        >>> preds = model2.predict(X_test)
+        """
+        _onnx_module.load_params(self, path)
+        return self
 
 
 # ──────────────────────────────────────────────────────────────────────────────

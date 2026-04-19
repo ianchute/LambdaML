@@ -11,7 +11,9 @@ LambdaML lets you use *any numpy-compatible function* as your model and automati
 ```bash
 pip install lambdaml           # core (numpy only)
 pip install lambdaml[speed]    # + tqdm progress bars + joblib parallelism (recommended)
+pip install lambdaml[onnx]     # + ONNX export/import (v1.2.0)
 pip install lambdaml[examples] # + scipy, pandas, matplotlib for the notebook
+pip install lambdaml[all]      # everything
 ```
 
 ```python
@@ -45,6 +47,64 @@ print(model.predict_proba(X_test))       # probabilities
 For regression, swap in `LambdaRegressorModel` with `loss='mse'`, `'mae'`, `'huber'`, or `'pseudo_huber'`.
 
 See the [`examples/`](examples/) folder for runnable scripts and [`LambdaML_Showcase.ipynb`](LambdaML_Showcase.ipynb) for an interactive walkthrough with charts.
+
+To export a fitted model to ONNX:
+
+```python
+# Requires vectorized=True on the model
+proto = model.to_onnx('model.onnx', input_shape=(2,))
+
+# Inference via onnxruntime (no Python/LambdaML needed at runtime)
+from lambdaml import predict_onnx
+probs = predict_onnx('model.onnx', X_test)
+
+# Or save/load weights as .npz (always works, any model)
+model.save_params('weights.npz')
+model2.load_params('weights.npz')
+```
+
+---
+
+## What's new in v1.2.0
+
+**ONNX export and model persistence** — two new ways to save and deploy fitted models:
+
+`to_onnx()` traces a fitted vectorized model to a standard ONNX graph with parameters baked in as initializers. The exported file runs anywhere `onnxruntime` is installed — no Python model code, no LambdaML, no numpy required at inference time.
+
+`save_params()` / `load_params()` always works — saves the parameter dict to a compressed `.npz` file regardless of whether the model is vectorized. Requires re-providing the function `f` at load time (keeps the function in source, weights in the file).
+
+```bash
+pip install lambdaml[onnx]   # onnx + onnxruntime
+```
+
+```python
+# Auto-trace export (vectorized models only)
+def logistic_v(X, p):
+    return 1 / (1 + np.exp(-(X @ p['w'] + p['b'])))
+
+model = LambdaClassifierModel(f=logistic_v, p={'w': np.zeros(2), 'b': 0.0},
+                              vectorized=True)
+model.fit(X_train, Y_train, n_iter=200, lr=0.01)
+model.to_onnx('logistic.onnx', input_shape=(2,))
+
+# Runtime inference (no LambdaML needed)
+import onnxruntime as rt
+sess = rt.InferenceSession('logistic.onnx')
+probs = sess.run(None, {'X': X_test.astype('float32')})[0]
+
+# Convenience wrapper
+from lambdaml import predict_onnx, from_onnx
+probs  = predict_onnx('logistic.onnx', X_test)           # raw probabilities
+labels = predict_onnx('logistic.onnx', X_test, threshold=0.5)  # binary labels
+
+# Parameters-only (always works)
+model.save_params('weights.npz')
+model2 = LambdaClassifierModel(f=logistic_v, p={'w': np.zeros(2), 'b': 0.0},
+                               vectorized=True)
+model2.load_params('weights.npz')
+```
+
+The tracer supports standard numpy ops: `@` / `dot`, `+`, `-`, `*`, `/`, `**`, `exp`, `log`, `sqrt`, `tanh`, `sin`, `cos`, `abs`, `clip`, `log1p`, integer indexing (`X[:, 0]`), and slicing. Physics models using `arctan2` or complex control flow should use `save_params()` instead.
 
 ---
 
@@ -157,6 +217,24 @@ Six completely different model functions, one `.fit()` call — logistic regress
 
 **Other methods:** `.predict(X, progress_bar=False)` · `.predict_proba(X, progress_bar=False)` · `.score(X, Y)` · `.compute_loss(X, Y)` · `.get_params()` · `.loss_history`
 
+**ONNX / persistence methods** (on both model classes):
+
+| Method | Description |
+|---|---|
+| `.to_onnx(path, *, input_shape, ...)` | Export to ONNX. Requires `vectorized=True`. Returns `onnx.ModelProto`. |
+| `.save_params(path, **meta)` | Save weights to `.npz`. Always works. |
+| `.load_params(path)` | Load weights from `.npz` into this model. Returns `self`. |
+
+**Module-level helpers** (importable from `lambdaml`):
+
+| Function | Description |
+|---|---|
+| `predict_onnx(path_or_session, X, threshold=None)` | Run ONNX inference. Returns `(n,)` array. |
+| `from_onnx(path)` | Load an ONNX file and return an `onnxruntime.InferenceSession`. |
+| `save_params(model, path, **meta)` | Functional form of `.save_params()`. |
+| `load_params(model, path)` | Functional form of `.load_params()`. |
+| `OnnxTraceError` | Exception raised when tracing fails. |
+
 ### `LambdaRegressorModel(f, p, loss='mse', **kwargs)`
 
 | Parameter | Default | Description |
@@ -196,6 +274,21 @@ LRSchedule.warmup_cosine(warmup=10, T_max=100)
 | Default loss eval frequency | Every epoch (`eval_every=1`) | Every 10 epochs (`eval_every=10`) |
 | Gradient parallelism | Sequential across all parameters | Optional: `n_jobs=-1` uses all CPU cores |
 
+## ONNX support (v1.2.0)
+
+| Feature | Details |
+|---|---|
+| Export method | `model.to_onnx(path, input_shape=(n_features,))` |
+| Requirement | `vectorized=True` on the model; function uses standard numpy ops |
+| Serialization | Parameters baked in as ONNX float32 initializers |
+| ONNX opset | 17 (default); IR version 8 for broad onnxruntime compatibility |
+| Inference | `onnxruntime` — no LambdaML, no numpy, no Python model code needed |
+| Fallback | `save_params()` / `load_params()` — always works, any model type |
+| Install | `pip install lambdaml[onnx]` |
+| Supported numpy ops | `@`, `dot`, `+`, `-`, `*`, `/`, `**`, `exp`, `log`, `sqrt`, `tanh`, `sin`, `cos`, `abs`, `clip`, `log1p`, integer indexing `X[:, i]`, slicing |
+
+---
+
 ## Bug fixes from the original library
 
 | Bug | Original | Fixed |
@@ -225,14 +318,16 @@ LambdaML/
 ├── lambdaml/                # Installable package (pip install lambdaml)
 │   ├── __init__.py
 │   ├── lambda_model.py      # LambdaClassifierModel, LambdaRegressorModel, Optimizer
-│   └── lambda_utils.py      # NumericalDiff, GradientComputer, Regularization, LossFunctions, LRSchedule
+│   ├── lambda_utils.py      # NumericalDiff, GradientComputer, Regularization, LossFunctions, LRSchedule
+│   └── lambda_onnx.py       # to_onnx, from_onnx, save_params, load_params, predict_onnx (v1.2.0)
 ├── pyproject.toml           # Package metadata
-├── LambdaML_Showcase.ipynb  # Interactive notebook with all charts
+├── LambdaML_Showcase.ipynb  # Interactive notebook with all charts (section 12: ONNX)
 ├── examples/
 │   ├── example_tanh_regression.py
 │   ├── example_neural_network.py
 │   ├── example_diff_methods.py
-│   └── example_regressor.py
+│   ├── example_regressor.py
+│   └── example_onnx.py      # ONNX export/import demo and benchmark (v1.2.0)
 ├── data/
 │   └── circles.csv
 └── legacy/                  # Original library files (pre-rewrite)

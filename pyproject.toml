@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "lambdaml"
-version = "1.1.0"
+version = "1.2.0"
 description = "Gradient-free machine learning for any numpy-compatible function"
 readme = "README.md"
 license = { file = "LICENSE" }
@@ -16,7 +16,10 @@ dependencies = ["numpy>=1.21"]
 progress = ["tqdm>=4.0"]
 parallel = ["joblib>=1.0"]
 speed    = ["tqdm>=4.0", "joblib>=1.0"]
+onnx     = ["onnx>=1.14", "onnxruntime>=1.16"]
 examples = ["scipy", "pandas", "matplotlib", "tqdm>=4.0", "joblib>=1.0"]
+all      = ["tqdm>=4.0", "joblib>=1.0", "onnx>=1.14", "onnxruntime>=1.16",
+            "scipy", "pandas", "matplotlib"]
 
 [project.urls]
 Repository = "https://github.com/ianchute/LambdaML"
